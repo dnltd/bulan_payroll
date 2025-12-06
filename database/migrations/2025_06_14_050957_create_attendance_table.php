@@ -11,17 +11,27 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('attendance', function (Blueprint $table) {
-    $table->id();
-    $table->foreignId('employee_id')->constrained('employees')->onDelete('cascade');
-    $table->date('date');
-    $table->time('time_in')->nullable();
-    $table->time('time_out')->nullable();
-    $table->integer('rounds')->nullable();
-    $table->foreignId('holiday_id')->nullable()->constrained('holidays')->onDelete('set null');
-    $table->timestamps();
-});
+        Schema::create('attendances', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('employee_id');
+            $table->date('date');
+            $table->time('time_in')->nullable();
+            $table->time('time_out')->nullable();
+            $table->integer('rounds')->nullable();
+            $table->unsignedBigInteger('holiday_id')->nullable();
+            $table->timestamps();
 
+            // Foreign keys
+            $table->foreign('employee_id')
+                  ->references('id')
+                  ->on('employees')
+                  ->onDelete('cascade');
+
+            $table->foreign('holiday_id')
+                  ->references('id')
+                  ->on('holidays')
+                  ->onDelete('set null');
+        });
     }
 
     /**
@@ -29,6 +39,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('attendance');
+        Schema::dropIfExists('attendances');
     }
 };

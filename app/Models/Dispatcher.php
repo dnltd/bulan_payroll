@@ -9,6 +9,8 @@ class Dispatcher extends Model
 {
     use HasFactory;
 
+    protected $table = 'dispatcher';
+
     protected $fillable = ['user_id', 'employee_id'];
 
     public function user()

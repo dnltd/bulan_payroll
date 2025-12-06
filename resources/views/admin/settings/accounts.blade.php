@@ -1,89 +1,139 @@
-<h5>Create User Account</h5>
-
-<form method="POST" action="{{ route('admin.settings.createUser') }}">
-    @csrf
-    <div class="row g-2 mb-3">
-        <div class="col-md-6">
-            <select name="employee_id" class="form-select" required>
-                <option value="">-- Select Employee --</option>
-                @foreach($availableEmployees as $employee)
-                    <option value="{{ $employee->id }}">{{ $employee->full_name }} ({{ $employee->position }})</option>
-                @endforeach
-            </select>
-        </div>
-        <div class="col-md-3">
-            <input name="email" type="email" class="form-control" placeholder="Email" required>
-        </div>
-        <div class="col-md-3">
-            <select name="role" class="form-select" required>
-                <option value="dispatcher">Dispatcher</option>
-                <option value="admin">Admin</option>
-            </select>
-        </div>
+<div class="mb-3">
+        <h5 class="fw-bold">Accounts List</h5>
+        <p class="text-muted small mb-0">Manage dispatcher accounts. Admin accounts are protected and cannot be deleted.</p>
     </div>
-
-    <button type="submit" class="btn btn-success">
-        <i class="bi bi-plus-circle"></i> Create Account
-    </button>
-</form>
-
-@if(session('success'))
-    <div class="alert alert-success mt-3">{{ session('success') }}</div>
-@endif
-
-{{-- Auto-shown modal with account credentials --}}
-@if(session('new_account'))
-<div class="modal fade show" id="credentialsModal" style="display:block;" tabindex="-1" aria-modal="true" role="dialog">
-    <div class="modal-dialog">
-        <div class="modal-content shadow">
-            <div class="modal-header">
-                <h5 class="modal-title">Default Account Credentials</h5>
-                <a href="{{ url()->current() }}" class="btn-close"></a>
-            </div>
-            <div class="modal-body">
-                <p><strong>Name:</strong> {{ session('new_account.name') }}</p>
-                <p><strong>Email:</strong> {{ session('new_account.email') }}</p>
-                <p><strong>Role:</strong> {{ session('new_account.role') }}</p>
-                <p><strong>Default Password:</strong> {{ session('new_account.password') }}</p>
-                <p class="text-danger small mb-0">Make sure to copy and give these credentials to the user.</p>
-            </div>
-        </div>
-    </div>
+<div class="table-responsive shadow-sm rounded">
+    <table class="table table-bordered table-hover mb-0 align-middle accounts-table">
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th class="text-center">Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            @forelse($users as $user)
+                <tr>
+                    <td>{{ $user->employee->full_name ?? '-' }}</td>
+                    <td>{{ $user->email }}</td>
+                    <td>{{ ucfirst($user->role) }}</td>
+                    <td class="text-center actions-col">
+                        @if($user->role !== 'admin')
+                            <button class="btn btn-outline-danger btn-sm action-btn"
+                                    onclick="confirmDeleteUser({{ $user->id }})" 
+                                    title="Delete Account">
+                                <i class="bi bi-trash"></i>
+                                <span class="action-text">Delete</span>
+                            </button>
+                        @else
+                            <span class="badge bg-secondary">Protected</span>
+                        @endif
+                    </td>
+                </tr>
+            @empty
+                <tr>
+                    <td colspan="4" class="text-center text-muted">No accounts found.</td>
+                </tr>
+            @endforelse
+        </tbody>
+    </table>
 </div>
 
+<style>
+/* Table header style */
+.accounts-table thead th {
+    background-color: #17007C;
+    color: #fff;
+    font-weight: 600;
+    text-align: left;
+    padding: 10px;
+    border: 1px solid #17007C;
+}
+
+/* Table body style */
+.accounts-table tbody td {
+    vertical-align: middle;
+    text-align: left;
+    padding: 8px 10px;
+    border: 1px solid #dee2e6;
+}
+.accounts-table tbody tr:nth-child(even) { background-color: #f9f9ff; }
+.accounts-table tbody tr:hover { background-color: #eef2ff; transition: background-color 0.2s ease-in-out; }
+
+.actions-col { width: 180px; text-align: center; }
+.actions-col .action-btn { margin: 2px 0; white-space: nowrap; }
+.actions-col .action-btn .action-text { display: none; margin-left: 4px; }
+.actions-col .action-btn:hover .action-text { display: inline; }
+
+/* Delete button style */
+.btn-outline-danger {
+    border: 1px solid #dc3545;
+    color: #dc3545;
+    font-size: 0.875rem;
+}
+.btn-outline-danger:hover {
+    background-color: #dc3545;
+    color: #fff;
+}
+
+/* Badge style */
+.badge {
+    font-size: 0.8rem;
+    padding: 0.35em 0.6em;
+}
+
+/* Responsive table */
+.table-responsive {
+    overflow-x: auto;
+}
+</style>
+
+@push('scripts')
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
 <script>
-    setTimeout(() => {
-        window.location.href = "{{ url()->current() }}";
-    }, 10000); // auto close after 10 seconds
+function confirmDeleteUser(userId) {
+    Swal.fire({
+        title: 'Are you sure?',
+        text: "This account will be permanently deleted!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Yes, delete it!',
+        cancelButtonText: 'Cancel',
+        reverseButtons: true
+    }).then((result) => {
+        if (result.isConfirmed) {
+            const token = "{{ csrf_token() }}";
+            fetch(`/admin/settings/accounts/${userId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': token
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    // Remove row from table
+                    const row = document.querySelector(`button[action-id='${userId}']`)?.closest('tr');
+                    if(row) row.remove();
+
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Deleted!',
+                        text: 'Account has been deleted.',
+                        timer: 1500,
+                        showConfirmButton: false
+                    });
+                } else {
+                    Swal.fire('Error', 'Something went wrong!', 'error');
+                }
+            })
+            .catch(() => Swal.fire('Error', 'Something went wrong!', 'error'));
+        }
+    });
+}
 </script>
-@endif
-
-<hr class="my-4">
-
-<h5 class="mt-4">Accounts List</h5>
-<table class="table table-bordered">
-    <thead class="table-light">
-        <tr>
-            <th>Employee</th>
-            <th>Email</th>
-            <th>Role</th>
-            <th>Action</th>
-        </tr>
-    </thead>
-    <tbody>
-        @foreach($dispatchers as $user)
-            <tr>
-                <td>{{ $user->employee->full_name ?? '-' }}</td>
-                <td>{{ $user->email }}</td>
-                <td>{{ ucfirst($user->role) }}</td>
-                <td>
-                    <form method="POST" action="{{ route('admin.settings.account.delete', $user->id) }}" onsubmit="return confirm('Are you sure you want to delete this account?')">
-                        @csrf
-                        @method('DELETE')
-                        <button class="btn btn-danger btn-sm"><i class="bi bi-trash"></i></button>
-                    </form>
-                </td>
-            </tr>
-        @endforeach
-    </tbody>
-</table>
+@endpush

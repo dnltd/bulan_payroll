@@ -2,7 +2,6 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\LoginController;
-use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\VerifyController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\PayrollController;
@@ -14,78 +13,96 @@ use App\Http\Controllers\Admin\HolidayController;
 use App\Http\Controllers\Admin\RoundTripController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Dispatcher\DispatcherController;
+use App\Http\Controllers\Dispatcher\DashboardController;
+use App\Http\Controllers\Dispatcher\ScanController;
 
-// Default route redirects to login
-Route::get('/', fn () => redirect()->route('login'));
+/*
+|--------------------------------------------------------------------------
+| Authentication (Shared for Admin & Dispatcher)
+|--------------------------------------------------------------------------
+*/
+// Redirect root "/" to login
+Route::get('/', function () {
+    return redirect()->route('login');
+});
 
-// Authentication Routes
+// Login & Logout
 Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [LoginController::class, 'login'])->name('login.submit');
 Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
 
 // OTP Routes
-Route::get('/otp', [LoginController::class, 'showOtpForm'])->name('otp.form');
-Route::post('/otp', [LoginController::class, 'verifyOtp'])->name('otp.verify');
-Route::get('/otp/resend', [LoginController::class, 'resendOtp'])->name('otp.resend');
+Route::get('/otp', [LoginController::class, 'showOtpForm'])->name('auth.otp.form');
+Route::post('/otp', [LoginController::class, 'verifyOtp'])->name('auth.otp.verify');
+Route::get('/otp/resend', [LoginController::class, 'resendOtp'])->name('auth.otp.resend');
+Route::get('/login/success', function () {
+    return view('auth.login-success');
+})->name('login.success');
+// Forgot Password
+Route::get('/forgot-password', [VerifyController::class, 'showForm'])->name('auth.verify.form');
+Route::post('/send-otp', [VerifyController::class, 'sendOtp'])->name('auth.password.sendOtp');
+Route::get('/verify-otp', [VerifyController::class, 'showOtpForm'])->name('auth.verify.otp');
+Route::post('/verify-otp', [VerifyController::class, 'verifyOtp'])->name('auth.verify.otp.submit');
+Route::get('/reset-password', [VerifyController::class, 'showResetPasswordForm'])->name('auth.password.reset.form');
+Route::post('/reset-password', [VerifyController::class, 'resetPassword'])->name('auth.password.reset.submit');
+Route::post('/resend-otp', [VerifyController::class, 'resendOtp'])->name('auth.resend.otp');
 
-// Forgot Password 
-Route::get('/forgot-password', [VerifyController::class, 'showEmailForm'])->name('password.request');
-Route::post('/forgot-password/send', [VerifyController::class, 'sendOTP'])->name('password.send');
-Route::get('/verify-otp', [VerifyController::class, 'showOTPForm'])->name('password.otp.verify');
-Route::post('/verify-otp', [VerifyController::class, 'verifyOTP'])->name('password.otp.check');
-Route::get('/create-new-password', [VerifyController::class, 'showCreatePassword'])->name('password.create');
-Route::post('/create-new-password', [VerifyController::class, 'saveNewPassword'])->name('password.store');
+/*
+|--------------------------------------------------------------------------
+| Admin Routes
+|--------------------------------------------------------------------------
+*/
+Route::prefix('admin')
+    ->name('admin.')
+    ->middleware(['auth', \App\Http\Middleware\RoleMiddleware::class.':admin'])
+    ->group(function () {
 
-// Admin Routes
-Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('/dashboard', [AdminController::class, 'dashboard'])->name('dashboard');
+    Route::get('/autocomplete', [AdminController::class, 'autocomplete'])->name('autocomplete');
 
     // Payroll
     Route::get('/payroll', [PayrollController::class, 'index'])->name('payroll.index');
-    Route::get('/payslip/view/{id}', [PayslipController::class, 'view'])->name('payslip.view');
-    Route::get('/payslip/print/{id}', [PayslipController::class, 'print'])->name('payslip.print');
-    Route::get('/payslip/download/{id}', [PayslipController::class, 'download'])->name('payslip.download');
-    Route::get('/payslips/bulk-download', [PayslipController::class, 'bulkDownload'])->name('payslips.bulk');
+    Route::get('/payroll/export/pdf', [PayrollController::class, 'exportPdf'])->name('payroll.export.pdf');
+    Route::get('/payroll/print', [PayrollController::class, 'print'])->name('payroll.print');
+    
+    // Payslips
+    Route::get('/payslips/view/{id}', [PayslipController::class, 'view'])->name('payslips.view');
+    Route::get('/payslips/print/{id}', [PayslipController::class, 'print'])->name('payslips.print');
+    Route::get('/payslips/download/{id}', [PayslipController::class, 'download'])->name('payslips.download');
+    Route::get('/payslips/print-all', [PayslipController::class, 'bulkPrint'])->name('payslips.bulk.print');
+
 
     // Employees
-Route::get('/employees', [EmployeeController::class, 'index'])->name('employees.index');
-Route::get('/employees/create', [EmployeeController::class, 'create'])->name('employees.create');
-Route::post('/employees/store', [EmployeeController::class, 'store'])->name('employees.store');
-Route::get('/employees/{id}/edit', [EmployeeController::class, 'edit'])->name('employees.edit');
-Route::put('/employees/{id}', [EmployeeController::class, 'update'])->name('employees.update');
-Route::delete('/employees/{id}', [EmployeeController::class, 'destroy'])->name('employees.destroy');
+    Route::resource('employees', EmployeeController::class)->except(['show']);
+    Route::get('/employees/export/pdf', [EmployeeController::class, 'exportPDF'])->name('employees.export.pdf');
+    Route::get('/employees/print', [EmployeeController::class, 'print'])->name('employees.print');
+    Route::post('employees/make-admin/{id}', [EmployeeController::class, 'makeAdmin'])->name('employees.makeAdmin');
+Route::post('/employees/check-duplicate', [EmployeeController::class, 'checkDuplicate'])->name('employees.checkDuplicate');
+
 
     // Deductions
-Route::get('/deductions', [DeductionController::class, 'index'])->name('deductions.index');
-Route::get('/deductions/create', [DeductionController::class, 'create'])->name('deductions.create');
-Route::post('/deductions/store', [DeductionController::class, 'store'])->name('deductions.store');
-Route::get('/deductions/edit/{id}', [DeductionController::class, 'edit'])->name('deductions.edit');
-Route::put('/deductions/update/{id}', [DeductionController::class, 'update'])->name('deductions.update');
-Route::delete('/deductions/delete/{id}', [DeductionController::class, 'destroy'])->name('deductions.destroy');
-Route::get('deductions/export/pdf', [DeductionController::class, 'exportPDF'])->name('deductions.export.pdf');
-Route::get('deductions/print', [DeductionController::class, 'print'])->name('deductions.print');
+    Route::resource('deductions', DeductionController::class)->except(['show']);
+    Route::get('deductions/export/pdf', [DeductionController::class, 'exportPDF'])->name('deductions.export.pdf');
+    Route::get('deductions/print', [DeductionController::class, 'print'])->name('deductions.print');
 
-    // Holidays 
-    Route::get('/holidays', [HolidayController::class, 'index'])->name('holidays.index');
-    Route::get('/holidays/create', [HolidayController::class, 'create'])->name('holidays.create');
-    Route::post('/holidays', [HolidayController::class, 'store'])->name('holidays.store');
-    Route::get('/holidays/{holiday}/edit', [HolidayController::class, 'edit'])->name('holidays.edit');
-    Route::put('/holidays/{holiday}', [HolidayController::class, 'update'])->name('holidays.update');
-    Route::delete('/holidays/{holiday}', [HolidayController::class, 'destroy'])->name('holidays.destroy');
+    // Holidays
+    Route::resource('holidays', HolidayController::class)->except(['show']);
 
-    // Attendance
-    Route::get('/attendance', [AttendanceController::class, 'index'])->name('attendance.index');
+// Attendance
+Route::get('/attendance', [AttendanceController::class, 'index'])->name('attendance.index');
 Route::get('/attendance/scan', [AttendanceController::class, 'scan'])->name('attendance.scan');
 Route::post('/attendance/capture', [AttendanceController::class, 'capture'])->name('attendance.capture');
-
-    // Round Trip Monitoring
+Route::get('/attendance/today', [AttendanceController::class, 'todayAttendance'])->name('attendance.today');
+Route::post('/attendance/end-shift', [AttendanceController::class, 'endShift'])->name('attendance.endShift');
+Route::get('/attendance/status/{employeeId}', [AttendanceController::class, 'getShiftStatus']);
+Route::post('/attendance/manual-store', [AttendanceController::class, 'manualStore'])->name('attendance.manual.store');
+    // Round Trip
     Route::get('/round_trip', [RoundTripController::class, 'index'])->name('round_trip.index');
 
-    // Settings 
+    // Settings
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
-
-    // Profile Management
     Route::post('/settings/profile', [SettingsController::class, 'updateProfile'])->name('settings.profile');
+    Route::post('/settings/change-password', [SettingsController::class, 'changePassword'])->name('settings.changePassword');
     Route::post('/settings/user/create', [SettingsController::class, 'createUser'])->name('settings.createUser');
     Route::delete('/settings/account/delete/{id}', [SettingsController::class, 'deleteUser'])->name('settings.account.delete');
 
@@ -94,8 +111,27 @@ Route::post('/attendance/capture', [AttendanceController::class, 'capture'])->na
     Route::delete('/settings/salary/delete/{id}', [SettingsController::class, 'deleteSalary'])->name('settings.salary.delete');
 });
 
-// Dispatcher Routes
-Route::prefix('dispatcher')->name('dispatcher.')->group(function () {
-    Route::get('/scan', [DispatcherController::class, 'scanFace'])->name('scan');
-    Route::post('/scan/process', [DispatcherController::class, 'processScan'])->name('processScan');
+/*
+|--------------------------------------------------------------------------
+| Dispatcher Routes
+|--------------------------------------------------------------------------
+*/
+Route::prefix('dispatcher')->name('dispatcher.')
+    ->middleware(['auth', \App\Http\Middleware\RoleMiddleware::class.':dispatcher'])
+    ->group(function () {
+
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::post('/change-password', [DashboardController::class, 'changePassword'])->name('change.password');
+    // Scan
+    // ✅ Scan Face
+    Route::get('/scan/face', [ScanController::class, 'scanFace'])->name('scan.face');
+    Route::post('/scan/face/capture', [ScanController::class, 'capture'])->name('scan.face.capture');
+
+    // ✅ End Shift
+    Route::post('/end-shift', [ScanController::class, 'endShift'])->name('end.shift');
+
+    // ✅ Fetch today’s logs (used in Blade refresh)
+    Route::get('/today/logs', [ScanController::class, 'todayLogs'])->name('today.logs');
+    Route::get('/round-trip-history', [ScanController::class, 'roundTripHistory'])->name('roundtrip.history');
 });
+

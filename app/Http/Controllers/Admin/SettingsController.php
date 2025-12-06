@@ -14,35 +14,56 @@ use App\Models\SalaryRate;
 class SettingsController extends Controller
 {
     public function index()
-    {
-        return view('admin.settings.index', [
-            'dispatchers' => User::whereIn('role', ['admin', 'dispatcher'])->with('employee')->get(),
-            'availableEmployees' => Employee::doesntHave('user')->get(),
-            'salaryRates' => SalaryRate::all()
-        ]);
-    }
+{
+    // Paginate users instead of using get()
+    $users = User::with('employee')
+                 ->whereIn('role', ['admin', 'dispatcher'])
+                 ->orderBy('id', 'desc')
+                 ->paginate(10); // 10 per page
+
+    $availableEmployees = Employee::doesntHave('user')->get();
+    $salaryRates = SalaryRate::all();
+
+    return view('admin.settings.index', compact('users', 'availableEmployees', 'salaryRates'));
+}
+
 
     public function updateProfile(Request $request)
     {
         $request->validate([
-            'name' => 'required|string|max:255',
+            'first_name' => 'required|string|max:255',
+            'middle_name' => 'nullable|string|max:255',
+            'last_name'  => 'required|string|max:255',
             'email' => 'required|email',
-            'contact_number' => 'nullable|string',
+            'contact_number' => 'nullable|numeric',
             'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
         ]);
 
         $user = Auth::user();
-        $user->full_name = $request->name;
+        $user->first_name = $request->first_name;
+        $user->middle_name = $request->middle_name;
+        $user->last_name = $request->last_name;
         $user->email = $request->email;
 
         if ($request->hasFile('profile_picture')) {
-            $file = $request->file('profile_picture');
-            $filename = time() . '_' . $file->getClientOriginalName();
+    // Delete old picture if exists
+    if ($user->profile_picture && Storage::disk('public')->exists('profile_pictures/' . $user->profile_picture)) {
+        Storage::disk('public')->delete('profile_pictures/' . $user->profile_picture);
+    }
 
-            $file->storeAs('profile_pictures', $filename, 'public');
+    // Upload new picture
+    $file = $request->file('profile_picture');
+    $filename = time() . '_' . $file->getClientOriginalName();
+    $file->storeAs('profile_pictures', $filename, 'public');
 
-            $user->profile_picture = $filename;
-        }
+    $user->profile_picture = $filename;
+    } elseif ($request->remove_picture) {
+    // ✅ Remove existing profile picture (if requested)
+    if ($user->profile_picture && Storage::disk('public')->exists('profile_pictures/' . $user->profile_picture)) {
+        Storage::disk('public')->delete('profile_pictures/' . $user->profile_picture);
+    }
+    $user->profile_picture = null;
+    }
 
         $user->save();
 
@@ -54,49 +75,42 @@ class SettingsController extends Controller
         return back()->with('success', 'Profile updated successfully.');
     }
 
-    public function createUser(Request $request)
-{
-    $request->validate([
-        'employee_id' => 'required|exists:employees,id',
-        'email' => 'required|email|unique:users,email',
-        'role' => 'required|in:admin,dispatcher'
-    ]);
-
-    $defaultPassword = \Str::random(8); // generate random 8-char password
-
-    $employee = Employee::findOrFail($request->employee_id);
-
-    $user = new User();
-    $user->full_name = $employee->full_name;
-    $user->email = $request->email;
-    $user->password = \Hash::make($defaultPassword);
-    $user->role = $request->role;
-    $user->employee_id = $employee->id;
-    $user->is_verified = true;
-    $user->save();
-
-    // Pass new account details to view
-    return redirect()
-        ->back()
-        ->with('success', 'Account created.')
-        ->with('new_account', [
-            'name' => $user->full_name,
-            'email' => $user->email,
-            'role' => ucfirst($user->role),
-            'password' => $defaultPassword
-        ]);
-}
-
-
     public function deleteUser($id)
     {
         $user = User::findOrFail($id);
+
+        // Protect admin accounts from deletion
+        if ($user->role === 'admin') {
+            return back()->with('error', 'Admin accounts cannot be deleted.');
+        }
+
         if ($user->employee) {
             $user->employee->user_id = null;
             $user->employee->save();
         }
+
         $user->delete();
+
         return back()->with('success', 'User deleted successfully.');
+    }
+
+    public function changePassword(Request $request)
+    {
+        $request->validate([
+            'current_password' => 'required',
+            'new_password' => 'required|string|min:8|confirmed',
+        ]);
+
+        $user = Auth::user();
+
+        if (!Hash::check($request->current_password, $user->password)) {
+            return back()->with('error', 'Current password is incorrect.');
+        }
+
+        $user->password = Hash::make($request->new_password);
+        $user->save();
+
+        return back()->with('success', 'Password changed successfully.');
     }
 
     public function storeSalary(Request $request)

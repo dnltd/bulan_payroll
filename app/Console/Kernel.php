@@ -20,8 +20,19 @@ class Kernel extends ConsoleKernel
      * Define the application's command schedule.
      */
     protected function schedule(Schedule $schedule)
-{
-    $schedule->command('payroll:generate')->fridays()->at('23:00');
-}
+    {
+        // This will run every Friday at 11:00 PM
+        $schedule->command('payroll:generate')->fridays()->at('23:00');
+    }
 
+    /**
+     * Bootstrap any application services.
+     */
+    protected function bootstrap()
+    {
+        parent::bootstrap();
+
+        // Ensures time zone is consistent
+        date_default_timezone_set(config('app.timezone'));
+    }
 }

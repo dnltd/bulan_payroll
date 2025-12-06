@@ -5,64 +5,135 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Payroll;
-use App\Models\Employee;
-use App\Models\Attendance;
-use App\Models\Holiday;
-use App\Models\Deduction;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
+use App\Services\PayrollService;
 
 class PayrollController extends Controller
 {
-    public function index()
+    protected PayrollService $payrollService;
+
+    public function __construct(PayrollService $payrollService)
     {
-        $payrolls = Payroll::with('employee')->orderBy('date', 'desc')->paginate(10);
+        $this->payrollService = $payrollService;
+    }
 
-        // Totals for the view
-        $totalPayroll = $payrolls->sum('gross_salary');
-        $totalDeductions = $payrolls->sum('deductions');
-        $totalNet = $payrolls->sum('net_salary');
+    public function index(Request $request)
+{
+    // Default: LAST WEEK (Sat–Fri)
+    $startDate = $request->input('start_date')
+        ? Carbon::parse($request->input('start_date'))->format('Y-m-d')
+        : now()->subWeek()->startOfWeek(Carbon::SATURDAY)->format('Y-m-d');
 
-        return view('admin.payroll.index', compact('payrolls', 'totalPayroll', 'totalDeductions', 'totalNet'));
+    $endDate = $request->input('end_date')
+        ? Carbon::parse($request->input('end_date'))->format('Y-m-d')
+        : Carbon::parse($startDate)->addDays(6)->format('Y-m-d');
+
+    $query = Payroll::with('employee.salaryRate')
+        ->where('start_date', $startDate)
+        ->where('end_date', $endDate);
+
+    // ✅ Filter by position
+    if ($request->filled('position')) {
+        $query->whereHas('employee', function ($q) use ($request) {
+            $q->where('position', $request->position);
+        });
+    }
+
+    // ✅ Preferred: filter by employee_id (from autocomplete)
+    if ($request->filled('employee_id')) {
+        $query->where('employee_id', $request->employee_id);
+    }
+    // ✅ Fallback: filter by search string
+    elseif ($request->filled('search')) {
+        $search = $request->input('search');
+        $query->whereHas('employee', function ($q) use ($search) {
+            $q->whereRaw("CONCAT_WS(' ', first_name, middle_name, last_name) LIKE ?", ["%{$search}%"]);
+        });
+    }
+
+    $payrolls = $query->orderBy('id', 'desc')->paginate(10);
+
+    // Totals query (respect same filters)
+    $totalsQuery = Payroll::query()
+        ->where('start_date', $startDate)
+        ->where('end_date', $endDate);
+
+    if ($request->filled('position')) {
+        $totalsQuery->whereHas('employee', function ($q) use ($request) {
+            $q->where('position', $request->position);
+        });
+    }
+
+    if ($request->filled('employee_id')) {
+        $totalsQuery->where('employee_id', $request->employee_id);
+    } elseif ($request->filled('search')) {
+        $search = $request->input('search');
+        $totalsQuery->whereHas('employee', function ($q) use ($search) {
+            $q->whereRaw("CONCAT_WS(' ', first_name, middle_name, last_name) LIKE ?", ["%{$search}%"]);
+        });
+    }
+
+    $totalPayroll    = (float) $totalsQuery->sum('gross_salary');
+    $totalDeductions = (float) $totalsQuery->sum('deductions');
+    $totalNet        = (float) $totalsQuery->sum('net_salary');
+
+    return view('admin.payroll.index', compact(
+        'payrolls',
+        'totalPayroll',
+        'totalDeductions',
+        'totalNet',
+        'startDate',
+        'endDate'
+    ));
+}
+
+
+    public function exportPdf(Request $request)
+    {
+        $startDate = $request->input('start_date')
+            ?? now()->subWeek()->startOfWeek(Carbon::SATURDAY)->format('Y-m-d');
+        $endDate = $request->input('end_date')
+            ?? Carbon::parse($startDate)->addDays(6)->format('Y-m-d');
+
+        $payrolls = Payroll::with('employee.salaryRate')
+            ->where('start_date', $startDate)
+            ->where('end_date', $endDate)
+            ->latest('id')
+            ->get();
+
+        return Pdf::loadView('admin.payroll.pdf', compact('payrolls'))
+            ->setPaper('a4', 'landscape')
+            ->download("payroll_report_{$startDate}_to_{$endDate}.pdf");
+    }
+
+    public function print(Request $request)
+    {
+        $startDate = $request->input('start_date')
+            ?? now()->subWeek()->startOfWeek(Carbon::SATURDAY)->format('Y-m-d');
+        $endDate = $request->input('end_date')
+            ?? Carbon::parse($startDate)->addDays(6)->format('Y-m-d');
+
+        $payrolls = Payroll::with('employee.salaryRate')
+            ->where('start_date', $startDate)
+            ->where('end_date', $endDate)
+            ->latest('id')
+            ->get();
+
+        return response()->view('admin.payroll.print', compact('payrolls'))
+            ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+            ->header('Pragma', 'no-cache');
     }
 
     public function generate()
     {
-        $employees = Employee::with('salaryRate')->get();
-        $holidays = Holiday::pluck('date')->map(fn($d) => Carbon::parse($d)->toDateString())->toArray();
+        // Generate for current week, not last week
+        $startDate = now()->startOfWeek(Carbon::SATURDAY)->format('Y-m-d');
+        $endDate   = now()->startOfWeek(Carbon::SATURDAY)->addDays(6)->format('Y-m-d');
 
-        $startDate = Carbon::now()->subDays(6)->startOfDay();
-        $endDate = Carbon::now()->endOfDay();
+        $this->payrollService->generatePayroll($startDate, $endDate);
 
-        foreach ($employees as $employee) {
-            $dailyRate = $employee->salaryRate->daily_rate ?? 0;
-            $totalGross = 0;
-
-            $attendances = Attendance::where('employee_id', $employee->id)
-                ->whereBetween('date', [$startDate, $endDate])
-                ->get();
-
-            foreach ($attendances as $attendance) {
-                $attendanceDate = Carbon::parse($attendance->date)->toDateString();
-                $isHoliday = in_array($attendanceDate, $holidays);
-                $rate = $isHoliday ? ($dailyRate * 2) : $dailyRate;
-                $totalGross += $rate;
-            }
-
-            $deductions = Deduction::where('employee_id', $employee->id)
-                ->whereBetween('date', [$startDate, $endDate])
-                ->sum('amount');
-
-            $net = $totalGross - $deductions;
-
-            Payroll::create([
-                'employee_id' => $employee->id,
-                'gross_salary' => $totalGross,
-                'deductions' => $deductions,
-                'net_salary' => $net,
-                'date' => now(),
-            ]);
-        }
-
-        return redirect()->route('admin.payroll.index')->with('success', 'Payroll generated successfully.');
+        return redirect()->route('admin.payroll.index')
+            ->with('success', "Payroll generated for $startDate to $endDate.");
     }
 }

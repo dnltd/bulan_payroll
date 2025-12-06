@@ -21,28 +21,40 @@ class PayslipController extends Controller
     public function print($id)
     {
         $payroll = Payroll::with('employee')->findOrFail($id);
-        $pdf = Pdf::loadView('admin.payslips.pdf', compact('payroll'));
-        return $pdf->stream('Payslip_' . ($payroll->employee->full_name ?? 'Employee') . '.pdf');
+        return view('admin.payslips.print', compact('payroll'));
     }
 
     public function download($id)
     {
         $payroll = Payroll::with('employee')->findOrFail($id);
-        $pdf = Pdf::loadView('admin.payslips.pdf', compact('payroll'));
+
+        $pdf = Pdf::loadView('admin.payslips.pdf', compact('payroll'))
+            ->setPaper([0, 0, 280.63, 595.28], 'portrait'); // ✅ DL size in points
+
         return $pdf->download('Payslip_' . ($payroll->employee->full_name ?? 'Employee') . '.pdf');
     }
 
-    public function bulkDownload()
+    public function bulkPrint(Request $request)
     {
+        $startDate = $request->query('start_date');
+        $endDate   = $request->query('end_date');
+
+        if (!$startDate || !$endDate) {
+            // Default: current week (Sat–Fri)
+            $today     = now();
+            $startDate = $today->copy()->startOfWeek(Carbon::SATURDAY)->format('Y-m-d');
+            $endDate   = $today->copy()->endOfWeek(Carbon::FRIDAY)->format('Y-m-d');
+        }
+
         $payrolls = Payroll::with('employee')
-            ->whereDate('date', now()->format('Y-m-d'))
+            ->whereDate('start_date', $startDate)
+            ->whereDate('end_date', $endDate)
             ->get();
 
         if ($payrolls->isEmpty()) {
-            return back()->with('error', 'No payrolls found for today.');
+            return back()->with('error', "No payrolls found for the selected week.");
         }
 
-        $pdf = Pdf::loadView('admin.payslips.bulk', compact('payrolls'));
-        return $pdf->download('All_Payslips_' . now()->format('Y_m_d') . '.pdf');
+        return view('admin.payslips.bulk', compact('payrolls', 'startDate', 'endDate'));
     }
 }

@@ -65,7 +65,7 @@
 <body>
 
 <div class="report-header">
-    <img src="{{ public_path('images/logo.png') }}" alt="Company Logo">
+    <img src="{{ asset('images/logo.png') }}" alt="Company Logo">
     <h2>Bulan Transport Cooperative</h2>
     <p>Deduction Report</p>
     <p><strong>Date:</strong> {{ now()->format('F d, Y') }}</p>

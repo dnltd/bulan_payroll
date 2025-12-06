@@ -10,7 +10,8 @@ class HolidayController extends Controller
 {
     public function index()
     {
-        $holidays = Holiday::orderBy('date', 'asc')->get();
+        // Paginate holidays, 10 per page
+        $holidays = Holiday::orderBy('date', 'asc')->paginate(10);
         return view('admin.holidays.index', compact('holidays'));
     }
 
@@ -20,35 +21,34 @@ class HolidayController extends Controller
     }
 
     public function store(Request $request)
-{
-    $request->validate([
-        'name' => 'required|string|max:255',
-        'date' => 'required|date|after:today',
-    ]);
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'date' => 'required|date|after:today',
+        ]);
 
-    Holiday::create([
-        'name' => $request->name,
-        'date' => $request->date,
-    ]);
+        Holiday::create([
+            'name' => $request->name,
+            'date' => $request->date,
+        ]);
 
-    return redirect()->route('admin.holidays.index')->with('success', 'Holiday added successfully.');
-}
+        return redirect()->route('admin.holidays.index')->with('success', 'Holiday added successfully.');
+    }
 
-public function update(Request $request, Holiday $holiday)
-{
-    $request->validate([
-        'name' => 'required|string|max:255',
-        'date' => 'required|date|after:today|unique:holidays,date,' . $holiday->id,
-    ]);
+    public function update(Request $request, Holiday $holiday)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'date' => 'required|date|after:today|unique:holidays,date,' . $holiday->id,
+        ]);
 
-    $holiday->update([
-        'name' => $request->name,
-        'date' => $request->date,
-    ]);
+        $holiday->update([
+            'name' => $request->name,
+            'date' => $request->date,
+        ]);
 
-    return redirect()->route('admin.holidays.index')->with('success', 'Holiday updated successfully.');
-}
-
+        return redirect()->route('admin.holidays.index')->with('success', 'Holiday updated successfully.');
+    }
 
     public function destroy(Holiday $holiday)
     {

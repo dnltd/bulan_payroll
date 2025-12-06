@@ -3,55 +3,64 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
-use App\Models\Employee;
-use App\Models\Attendance;
-use App\Models\Holiday;
-use App\Models\Payroll;
-use App\Models\Deduction;
+use App\Services\PayrollService;
 use Carbon\Carbon;
 
 class GeneratePayroll extends Command
 {
-    protected $signature = 'payroll:generate';
-    protected $description = 'Automatically generate weekly payroll with holiday pay';
+    /**
+     * The name and signature of the console command.
+     *
+     * Example usage:
+     * php artisan payroll:generate
+     *
+     * @var string
+     */
+    protected $signature = 'payroll:generate {--start= : Start date (Y-m-d)} {--end= : End date (Y-m-d)}';
 
+    /**
+     * The console command description.
+     *
+     * @var string
+     */
+    protected $description = 'Generate payroll for a specific period (defaults to current week)';
+
+    /**
+     * Payroll service instance.
+     *
+     * @var PayrollService
+     */
+    protected PayrollService $payrollService;
+
+    /**
+     * Create a new command instance.
+     */
+    public function __construct(PayrollService $payrollService)
+    {
+        parent::__construct();
+        $this->payrollService = $payrollService;
+    }
+
+    /**
+     * Execute the console command.
+     */
     public function handle()
     {
-        $employees = Employee::with('salaryRate')->get();
-        $holidays = Holiday::pluck('date')->toArray();
-
-        $startDate = Carbon::now()->subDays(6)->startOfDay();
-        $endDate = Carbon::now()->endOfDay();
-
-        foreach ($employees as $employee) {
-            $dailyRate = $employee->salaryRate->daily_rate ?? 0;
-            $totalGross = 0;
-
-            $attendances = Attendance::where('employee_id', $employee->id)
-                ->whereBetween('date', [$startDate, $endDate])
-                ->get();
-
-            foreach ($attendances as $attendance) {
-                $isHoliday = in_array(Carbon::parse($attendance->date)->toDateString(), $holidays);
-                $rate = $isHoliday ? ($dailyRate * 2) : $dailyRate;
-                $totalGross += $rate;
-            }
-
-            $deductions = Deduction::where('employee_id', $employee->id)
-                ->whereBetween('date', [$startDate, $endDate])
-                ->sum('amount');
-
-            $net = $totalGross - $deductions;
-
-            Payroll::create([
-                'employee_id' => $employee->id,
-                'gross_salary' => $totalGross,
-                'deductions' => $deductions,
-                'net_salary' => $net,
-                'date' => now()
-            ]);
+        // Determine start and end dates
+        if ($this->option('start') && $this->option('end')) {
+            $startDate = Carbon::parse($this->option('start'))->startOfDay();
+            $endDate = Carbon::parse($this->option('end'))->endOfDay();
+        } else {
+            // Default to Saturday–Friday week
+            $startDate = Carbon::now()->startOfWeek(Carbon::SATURDAY);
+            $endDate = $startDate->copy()->addDays(6)->endOfDay();
         }
 
-        $this->info('Payroll generated successfully.');
+        $this->info("Generating payroll from {$startDate->toDateString()} to {$endDate->toDateString()}...");
+
+        // Call the service
+        $this->payrollService->generatePayroll($startDate, $endDate);
+
+        $this->info('✅ Payroll generation completed successfully.');
     }
 }

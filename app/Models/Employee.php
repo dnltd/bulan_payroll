@@ -10,19 +10,24 @@ class Employee extends Model
     use HasFactory;
 
     protected $fillable = [
-        'full_name',
-        'position',
-        'address',
-        'contact_number',
-        'salary_rates_id',
-        'face_image', // ✅ Add this if you're saving face images
-    ];
+    'first_name',
+    'middle_name',
+    'last_name',
+    'email',
+    'position',
+    'address',
+    'contact_number',
+    'salary_rates_id',
+    'encoding_file',
+];
+
 
     // 🔗 Employee belongs to a salary rate
-    public function salaryRate()
+public function salaryRate()
 {
-    return $this->belongsTo(SalaryRate::class, 'salary_rates_id', 'id');
+    return $this->belongsTo(SalaryRate::class, 'salary_rates_id');
 }
+
 
 
     // 🔗 Employee has many attendance records
@@ -69,6 +74,22 @@ class Employee extends Model
     public function user()
 {
     return $this->hasOne(User::class, 'employee_id');
+}
+public function getFullNameAttribute()
+{
+    return trim("{$this->first_name} {$this->middle_name} {$this->last_name}");
+}
+public function isDriverOrConductor(): bool
+{
+    return in_array($this->position, ['Driver', 'Conductor']);
+}
+
+public function isOfficeStaff(): bool
+{
+    return in_array($this->position, [
+        'General Manager', 'Secretary', 'Treasurer',
+        'Inspector', 'Dispatcher', 'Cashier'
+    ]);
 }
 
 }

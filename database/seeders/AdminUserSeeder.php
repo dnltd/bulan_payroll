@@ -3,45 +3,43 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use App\Models\SalaryRate;
-use App\Models\Employee;
 use App\Models\User;
 use App\Models\Admin;
+use App\Models\Employee;
+use Illuminate\Support\Facades\Hash;
 
 class AdminUserSeeder extends Seeder
 {
-    public function run()
+    public function run(): void
     {
+        // Create employee record for admin
+        $employee = Employee::create([
+            'first_name'    => 'System',
+            'middle_name'   => null,
+            'last_name'     => 'Administrator',
+            'email'         => 'danica.letada@sorsu.edu.ph',
+            'position'      => 'Admin',
+            'address'       => 'Bulan, Sorsogon',
+            'contact_number'=> '0000000000',
+            'salary_rates_id'=> null, 
+        ]);
 
-// 1. Create or fetch the salary rate for Secretary
-$salary = SalaryRate::firstOrCreate(
-    ['position' => 'Secretary'],
-    ['daily_rate' => 500, 'overtime' => 50]
-);
+        // Create user record
+        $user = User::create([
+            'employee_id' => $employee->id,
+            'email'       => 'danica.letada@sorsu.edu.ph',
+            'password'    => Hash::make('password123'), 
+            'role'        => 'admin',
+            'is_verified' => true,
+            'first_name' => $employee->first_name,
+            'middle_name' => $employee->middle_name,
+            'last_name' => $employee->last_name,
+        ]);
 
-// 2. Create the Employee
-$employee = Employee::create([
-    'full_name' => 'Danica Letada',
-    'position' => 'Secretary',
-    'address' => 'Zone 4 Bulan, Sorsogon',
-    'contact_number' => '09301607668',
-    'salary_rates_id' => $salary->id,
-]);
-
-// 3. Create the User
-$user = User::create([
-    'email' => 'danica.letada@sorsu.edu.ph',
-    'password' => bcrypt('password123'),
-    'full_name' => 'Danica Letada',
-    'role' => 'admin',
-    'is_verified' => 1,
-]);
-
-// 4. Link to Admin table
-Admin::create([
-    'user_id' => $user->id,
-    'employee_id' => $employee->id,
-]);
-
+        // Create admin record linked to user
+        Admin::create([
+            'user_id'     => $user->id,
+            'employee_id' => $employee->id,
+        ]);
     }
 }

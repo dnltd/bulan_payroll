@@ -1,0 +1,22 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
+
+class Otp extends Model
+{
+    protected $fillable = [
+        'user_id', 'otp_code', 'is_used', 'expires_at',
+    ];
+
+    protected $casts = [
+        'expires_at' => 'datetime',
+    ];
+
+    public function isExpired(): bool
+    {
+        return $this->expires_at->isPast();
+    }
+}

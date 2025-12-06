@@ -2,80 +2,232 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Payslip</title>
+    <title>Employee Payslips</title>
     <style>
-        @page {
-            margin: 30px;
-        }
+        @page { size: letter portrait; margin: 10px; }
+
         body {
-            font-family: Arial, sans-serif;
-            font-size: 14px;
+            font-family: 'DejaVu Sans', sans-serif;
+            font-size: 10px;
+            margin: 5px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-content: flex-start;
         }
-        .container {
-            width: 100%;
-            padding: 20px;
+
+        .payslip {
+            width: 48%;
+            height: 55%;
+            border: 1.5px solid #000;
+            margin-bottom: 15px;
+            padding: 8px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            page-break-inside: avoid;
         }
+
         .header {
             text-align: center;
-            margin-bottom: 20px;
+            margin-bottom: 8px;
         }
+
         .header img {
-            width: 80px;
+            width: 45px;
             height: auto;
+            margin-bottom: 5px;
         }
-        .salary, .details {
+
+        .header h3 { margin: 3px 0; font-size: 10px; font-weight: bold; }
+        .header p { margin: 3px; font-size: 10px; }
+
+        table {
             width: 100%;
-            margin-bottom: 20px;
             border-collapse: collapse;
+            margin: 0;
+            border: 1px solid #000;
         }
-        .salary th, .salary td {
-            border: 1px solid #ccc;
-            padding: 8px;
+
+        table + table {
+            margin-top: -1px; /* attach tables */
         }
+
+        th, td {
+            border: 1px solid #000;
+            padding: 3px 4px;
+            font-size: 10px;
+        }
+
+        th { text-align: left; width: 45%; background-color: #ffffffff; }
+        td { text-align: center; }
+
+        .blank-row td {
+            padding: 6px 4px;
+            border: 1px solid #000;
+        }
+
+        .earnings-deductions {
+    display: flex;
+    justify-content: space-between;
+    gap: 0;           /* no gap */
+    margin-top: -1px; /* attach to previous table */
+}
+
+.earnings-deductions table {
+    width: 49%;        /* each table takes ~half */
+    border-collapse: collapse;
+}
+
+
+        .earnings-deductions table + table {
+            margin-top: 0;
+            border-left: none; /* avoid double border */
+        }
+
+        .section-title {
+            background-color: #ffffffff;
+            text-align: center;
+            font-weight: bold;
+            font-size: 10px;
+        }
+
+        .net-salary {
+            border: 1.5px solid #000;
+            font-weight: bold;
+            font-size: 10px;
+            text-align: center;
+            padding: 3px;
+            background-color: #ffffffff;
+        }
+
         .signature {
-            margin-top: 50px;
             text-align: right;
+            font-size: 10px;
+            margin-top: 25px;
         }
+
+        @media print { body { margin: 0; } }
     </style>
 </head>
 <body>
-    <div class="container">
+
+    <div class="payslip">
+        <!-- Header -->
         <div class="header">
-            <img src="{{ public_path('images/logo.png') }}" alt="Company Logo">
-            <h2>Bulan Transport Cooperative</h2>
-            <p>Automated Payroll System Payslip</p>
-            <p><strong>Date:</strong> {{ \Carbon\Carbon::parse($payroll->date)->format('F d, Y') }}</p>
+            <img src="{{ public_path('images/logo.png') }}" alt="Logo"><br>
+            <h3>BULAN TRANSPORT COOPERATIVE</h3>
+            <p>Bulan, Sorsogon</p>
+            <p><strong>Payslip for the Week of</strong><br>
+                {{ \Carbon\Carbon::parse($payroll->start_date)->format('F d, Y') }} -
+                {{ \Carbon\Carbon::parse($payroll->end_date)->format('F d, Y') }}
+            </p>
         </div>
 
-        <div class="details">
-            <p><strong>Employee Name:</strong> {{ $payroll->employee->full_name }}</p>
-            <p><strong>Position:</strong> {{ $payroll->employee->position }}</p>
-        </div>
+        <!-- Employee Info -->
+        <table>
+            <tr><th>Employee Name:</th><td>{{ $payroll->employee->full_name }}</td></tr>
+            <tr><th>Designation:</th><td>{{ $payroll->employee->position }}</td></tr>
+            <tr><th>Rate Per Day:</th><td>₱{{ number_format($payroll->employee->salaryRate->daily_rate ?? 0, 2) }}</td></tr>
+            <tr><th>OT Pay:</th><td>₱{{ number_format($payroll->overtime_pay, 2) }}</td></tr>
+            <tr><th>Holiday Pay:</th><td>₱{{ number_format($payroll->holiday_pay, 2) }}</td></tr>
+        </table>
 
-        <table class="salary">
-            <tr>
-                <th>Description</th>
-                <th>Amount (₱)</th>
+        <!-- Work Summary -->
+        <table>
+            <tr><th>Work Days:</th><td>{{ $payroll->work_days }}</td></tr>
+            <tr><th>OT:</th>
+                <td>
+                    @if(in_array($payroll->employee->position, ['Driver', 'Conductor']))
+                        {{ $payroll->overtime_units }} round(s)
+                    @else
+                        {{ $payroll->overtime_units }} hour(s)
+                    @endif
+                </td>
             </tr>
-            <tr>
-                <td>Gross Salary</td>
-                <td>{{ number_format($payroll->gross_salary, 2) }}</td>
-            </tr>
-            <tr>
-                <td>Deductions</td>
-                <td>{{ number_format($payroll->deductions, 2) }}</td>
-            </tr>
-            <tr>
-                <th>Net Salary</th>
-                <th>{{ number_format($payroll->net_salary, 2) }}</th>
+            <tr><th>Holiday:</th>
+                <td>
+                    @if(!empty($payroll->holiday_names))
+                        {{ count($payroll->holiday_names) }} day(s)
+                    @else 0 day(s)
+                    @endif
+                </td>
             </tr>
         </table>
 
+        <!-- Earnings & Deductions Container -->
+<table style="width: 100%; border-collapse: collapse; margin-top: -1px;">
+    <tr>
+        <!-- Earnings -->
+        <td style="width: 50%; vertical-align: top; border: 0; padding:0;">
+            <table style="width: 100%; border-collapse: collapse; border:1px solid #000;">
+                <tr><th colspan="2" class="section-title">Earnings</th></tr>
+                <tr><td>Basic Pay</td><td>₱{{ number_format($payroll->gross_salary - $payroll->overtime_pay - $payroll->holiday_pay,2) }}</td></tr>
+                <tr><td>Overtime</td><td>₱{{ number_format($payroll->overtime_pay,2) }}</td></tr>
+                <tr><td>Holiday</td><td>₱{{ number_format($payroll->holiday_pay,2) }}</td></tr>
+                <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+                <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+                <tr><th>Total</th><th>₱{{ number_format($payroll->gross_salary,2) }}</th></tr>
+            </table>
+        </td>
+
+        <!-- Deductions -->
+        <td style="width: 50%; vertical-align: top; border: 0; padding:0;">
+            @php
+                $deductions = collect(is_string($payroll->deductions_list) ? json_decode($payroll->deductions_list, true) : $payroll->deductions_list ?? []);
+                $sss = $deductions->filter(fn($d)=>stripos($d['type'],'SSS')!==false)->sum('amount');
+                $ca  = $deductions->filter(fn($d)=>stripos($d['type'],'Cash Advance')!==false || $d['type']==='CA')->sum('amount');
+                $busDamage = $deductions->filter(fn($d)=>stripos($d['type'],'Bus Damage')!==false)->sum('amount');
+                $carryPrev = $deductions->filter(fn($d)=>preg_match('/carry[\s-]*over.*(prev|previous)/i',$d['type']))->sum('amount');
+                $carryNext = $deductions->filter(fn($d)=>preg_match('/carry[\s-]*over.*(next|to next)/i',$d['type']))->sum('amount');
+                $othersExist = $deductions->filter(function($d){
+                    $known = ['SSS','CA','Cash Advance','Bus Damage'];
+                    return !collect($known)->contains(fn($k)=>stripos($d['type'],$k)!==false);
+                })->isNotEmpty();
+                $totalDeductions = $sss + $ca + $busDamage + $carryPrev;
+            @endphp
+            <table style="width: 100%; border-collapse: collapse; border:1px solid #000;">
+                <tr><th colspan="2" class="section-title">Deductions</th></tr>
+                @if($sss>0)<tr><td>SSS</td><td>₱{{ number_format($sss,2) }}</td></tr>@endif
+
+                <!-- Others row always visible -->
+                <tr><td>Others</td><td></td></tr>
+
+                @if($ca>0)<tr><td>Cash Advance</td><td>₱{{ number_format($ca,2) }}</td></tr>@endif
+                @if($busDamage>0)<tr><td>Bus Damage</td><td>₱{{ number_format($busDamage,2) }}</td></tr>@endif
+                @if($carryPrev>0)<tr><td>Carry Over (Previous)</td><td>₱{{ number_format($carryPrev,2) }}</td></tr>@endif
+                @if($carryNext>0)<tr><td>Carry Over (To Next Payroll)</td><td>₱{{ number_format($carryNext,2) }}</td></tr>@endif
+
+                <!-- Blank rows to match earnings table height -->
+                <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+                <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+                <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+                <tr><th>Total</th><th>₱{{ number_format($totalDeductions,2) }}</th></tr>
+            </table>
+        </td>
+    </tr>
+</table>
+
+
+
+
+        <div class="net-salary">
+            Net Salary: ₱{{ number_format($payroll->net_salary,2) }}
+        </div>
+
         <div class="signature">
-            <p>Prepared by:</p>
-            <p>___________________________</p>
-            <p>Admin / Payroll Officer</p>
+            Prepared by: <strong>{{ auth()->user()->full_name }}</strong><br>
+            Admin / Payroll Officer
         </div>
     </div>
+
+
+<script>
+    window.onload = () => window.print();
+    window.onafterprint = () => {
+        window.location.href = "{{ route('admin.payroll.index') }}";
+    };
+</script>
 </body>
 </html>

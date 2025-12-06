@@ -12,10 +12,13 @@ class User extends Authenticatable
     protected $fillable = [
         'email',
         'password',
-        'full_name',
+        'first_name',
+        'middle_name',
+        'last_name',
         'role',
         'is_verified',
-        'employee_id', // ✅ Include this
+        'employee_id',
+        'profile_picture',
     ];
 
     protected $hidden = ['password'];
@@ -32,9 +35,17 @@ class User extends Authenticatable
         return $this->hasOne(Dispatcher::class);
     }
 
-    // ✅ Link user to the employee table
+    // Relationship to employee record
     public function employee()
     {
         return $this->belongsTo(Employee::class, 'employee_id');
+    }
+
+    // Accessor for full name
+    public function getFullNameAttribute()
+    {
+        return $this->first_name 
+            . ($this->middle_name ? ' ' . $this->middle_name : '') 
+            . ' ' . $this->last_name;
     }
 }
