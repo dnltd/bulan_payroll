@@ -125,15 +125,5 @@ class EmployeeApiController extends Controller
             "message" => "Employee deleted successfully"
         ], 200);
     }
-    public function boot()
-    {
-        Response::macro('xml', function ($data, $status = 200, $rootElement = 'response') {
-            // data must be array
-            if (!is_array($data)) {
-                $data = (array) $data;
-            }
-            $xml = ArrayToXml::convert([$rootElement => $data], $rootElement);
-            return response($xml, $status)->header('Content-Type', 'application/xml');
-        });
-    }
+   
 }
